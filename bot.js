@@ -121,8 +121,8 @@ const commands = [
     .setName('bulkkeys')
     .setDescription('Generate bulk keys and download them as a txt file')
     .addStringOption(opt => opt.setName('duration').setDescription('Duration unit').setRequired(true).addChoices(...durationChoices))
-    .addIntegerOption(opt => opt.setName('length').setDescription('How many units, example: 3 days').setRequired(false).setMinValue(1).setMaxValue(100000))
-    .addIntegerOption(opt => opt.setName('amount').setDescription('How many keys to generate').setRequired(true).setMinValue(1).setMaxValue(500)),
+    .addIntegerOption(opt => opt.setName('amount').setDescription('How many keys to generate').setRequired(true).setMinValue(1).setMaxValue(500))
+    .addIntegerOption(opt => opt.setName('length').setDescription('How many units, example: 3 days').setRequired(false).setMinValue(1).setMaxValue(100000)),
 
   new SlashCommandBuilder()
     .setName('quickgen')
