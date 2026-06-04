@@ -1,14 +1,14 @@
 {
   "name": "et-sniper-bot",
-  "version": "2.4.3",
-  "description": "ET Sniper Discord Bot with LootLabs rewards - Railway simple install",
+  "version": "2.4.4",
+  "description": "ET Sniper Discord Bot with LootLabs rewards - Railway fixed lockfile",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
   "dependencies": {
-    "discord.js": "14.15.3",
-    "dotenv": "16.4.7",
+    "discord.js": "14.26.4",
+    "dotenv": "16.6.1",
     "node-fetch": "2.7.0"
   },
   "engines": {
