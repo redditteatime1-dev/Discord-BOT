@@ -22,6 +22,8 @@ const REDEEM_CHANNEL_ID = process.env.REDEEM_CHANNEL_ID || '';
 const GENKEY_ROLE_ID = process.env.GENKEY_ROLE_ID || process.env.ADMIN_ROLE_ID || '';
 const REDEEM_ROLE_ID = process.env.REDEEM_ROLE_ID || '';
 const OWNER_ROLE_ID = process.env.OWNER_ROLE_ID || '';
+const LOOTLAB_ROLE_ID = process.env.LOOTLAB_ROLE_ID || '';
+const LOOTLAB_POLL_SECONDS = Math.max(10, Number(process.env.LOOTLAB_POLL_SECONDS || 15));
 
 if (!BOT_TOKEN || !CLIENT_ID || !GUILD_ID || !API_URL || !ADMIN_TOKEN) {
   console.error('[Bot] Missing required environment variables.');
@@ -109,6 +111,14 @@ const commands = [
   new SlashCommandBuilder()
     .setName('status')
     .setDescription('Check your subscription status'),
+
+  new SlashCommandBuilder()
+    .setName('lootlab')
+    .setDescription('Get a LootLabs link that rewards you with a 12 hour key'),
+
+  new SlashCommandBuilder()
+    .setName('lootlabstatus')
+    .setDescription('Check your latest LootLabs reward status'),
 
   new SlashCommandBuilder()
     .setName('genkey')
@@ -403,17 +413,49 @@ async function tryGetUserKeys(userId) {
   return null;
 }
 
+
+async function deliverLootLabRewards() {
+  const data = await apiGet('/admin/lootlab/completed?limit=25');
+  const rewards = Array.isArray(data.rewards) ? data.rewards : [];
+  for (const reward of rewards) {
+    try {
+      const user = await client.users.fetch(reward.discord_id);
+      const embed = new EmbedBuilder()
+        .setColor(0x10b981)
+        .setTitle('✅ LootLabs Reward Complete')
+        .setDescription('Here is your **12 hour ET Sniper key**. The timer does not start until you redeem it.')
+        .addFields(
+          { name: 'Key', value: `\`${reward.key}\``, inline: false },
+          { name: 'How to activate', value: 'Run `/redeem` in the server and paste this key.', inline: false },
+        )
+        .setTimestamp();
+      await user.send({ embeds: [embed] });
+      await apiPost(`/admin/lootlab/${reward.id}/delivered`, { delivered: true });
+      console.log(`[Bot] Delivered LootLabs reward key to ${reward.discord_id}`);
+    } catch (err) {
+      console.error(`[Bot] Could not DM LootLabs reward ${reward.id}:`, err.message);
+      await apiPost(`/admin/lootlab/${reward.id}/delivered`, { delivered: false, error: err.message });
+    }
+  }
+}
+
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 client.once('ready', () => {
   console.log(`[Bot] Logged in as ${client.user.tag}`);
   client.user.setActivity('ET Keys | /bothelp', { type: 3 });
+  deliverLootLabRewards().catch(err => console.error('[Bot] LootLabs delivery error:', err));
+  setInterval(() => deliverLootLabRewards().catch(err => console.error('[Bot] LootLabs delivery error:', err)), LOOTLAB_POLL_SECONDS * 1000);
 });
 
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   const name = interaction.commandName;
+
+  if (name === 'lootlab' && !roleOk(interaction, LOOTLAB_ROLE_ID)) {
+    return interaction.reply({ content: '❌ You do not have the required LootLabs reward role.', ephemeral: true });
+  }
 
   if (name === 'redeem') {
     if (REDEEM_CHANNEL_ID && interaction.channelId !== REDEEM_CHANNEL_ID) {
@@ -426,6 +468,55 @@ client.on('interactionCreate', async interaction => {
 
   if (isAdminCommand(name) && !canUseAdmin(interaction)) {
     return interaction.reply({ content: '❌ You do not have the required key/admin role.', ephemeral: true });
+  }
+
+  if (name === 'lootlab') {
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const data = await apiPost('/admin/lootlab/start', {
+        discord_id: interaction.user.id,
+        username: interaction.user.username,
+        tag: interaction.user.tag || interaction.user.username,
+      });
+      if (data.error) return interaction.editReply({ content: `❌ ${data.error}` });
+      const link = data.loot_url || data.destination_url;
+      const embed = new EmbedBuilder()
+        .setColor(0x8b5cf6)
+        .setTitle('🎁 LootLabs 12 Hour Key')
+        .setDescription('Finish this LootLabs link and I will DM you a **12 hour key** automatically.')
+        .addFields(
+          { name: 'Reward link', value: `[Click here to start](${link})`, inline: false },
+          { name: 'Reward', value: '12 hour key — timer starts only after `/redeem`', inline: false },
+        )
+        .setFooter({ text: data.using_lootlabs_api ? 'LootLabs API link created.' : 'Using direct destination URL because LootLabs API token is not set.' })
+        .setTimestamp();
+      return interaction.editReply({ embeds: [embed] });
+    } catch (err) {
+      console.error('[Bot] /lootlab error:', err);
+      return interaction.editReply({ content: '❌ Server error while creating your LootLabs link.' });
+    }
+  }
+
+  if (name === 'lootlabstatus') {
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const data = await apiGet(`/admin/lootlab/status/${encodeURIComponent(interaction.user.id)}`);
+      const rewards = Array.isArray(data.rewards) ? data.rewards : [];
+      if (!rewards.length) return interaction.editReply({ content: 'No LootLabs reward attempts found yet. Run `/lootlab` first.' });
+      const lines = rewards.slice(0, 5).map(r => {
+        const delivered = r.delivered_at ? 'DM sent' : r.key ? 'completed, waiting for DM' : 'pending';
+        return `#${r.id} — **${r.status}** — ${delivered}${r.key ? ` — \`${r.key}\`` : ''}`;
+      });
+      const embed = new EmbedBuilder()
+        .setColor(0x8b5cf6)
+        .setTitle('🎁 LootLabs Reward Status')
+        .setDescription(lines.join('\n'))
+        .setTimestamp();
+      return interaction.editReply({ embeds: [embed] });
+    } catch (err) {
+      console.error('[Bot] /lootlabstatus error:', err);
+      return interaction.editReply({ content: '❌ Server error.' });
+    }
   }
 
   if (name === 'redeem') {
@@ -752,6 +843,8 @@ client.on('interactionCreate', async interaction => {
       .setDescription([
         '`/redeem key:` redeem a key',
         '`/status` check your own access',
+        '`/lootlab` get a LootLabs reward link for a 12 hour key',
+        '`/lootlabstatus` check your LootLabs reward status',
         '`/genkey duration length amount` generate custom duration keys',
         '`/bulkkeys duration length amount` generate many keys with a txt download',
         '`/quickgen type amount` generate common keys fast',
