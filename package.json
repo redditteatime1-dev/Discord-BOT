@@ -1,18 +1,15 @@
 {
   "name": "et-sniper-bot",
-  "version": "1.0.1",
-  "description": "ET Sniper Discord Bot",
+  "version": "2.4.2",
+  "description": "ET Sniper Discord Bot with LootLabs rewards",
   "main": "bot.js",
   "scripts": {
-    "start": "node bot.js",
-    "dev": "nodemon bot.js"
+    "start": "node bot.js"
   },
   "dependencies": {
-    "discord.js": "^14.14.1",
-    "node-fetch": "^2.7.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
+    "discord.js": "^14.15.3",
+    "node-fetch": "^2.7.0",
+    "dotenv": "^16.4.7"
   },
   "engines": {
     "node": ">=18.0.0"
