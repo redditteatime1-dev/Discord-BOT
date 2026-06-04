@@ -1,7 +1,7 @@
 {
   "name": "et-sniper-bot",
-  "version": "2.4.4",
-  "description": "ET Sniper Discord Bot with LootLabs rewards - Railway fixed lockfile",
+  "version": "2.4.6",
+  "description": "ET Sniper Discord Bot with LootLabs rewards - Railway fixed LootLabs",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js"

@@ -121,6 +121,10 @@ const commands = [
     .setDescription('Check your latest LootLabs reward status'),
 
   new SlashCommandBuilder()
+    .setName('lootlabdebug')
+    .setDescription('Admin: check backend LootLabs config'),
+
+  new SlashCommandBuilder()
     .setName('genkey')
     .setDescription('Generate keys with a custom duration')
     .addStringOption(opt => opt.setName('duration').setDescription('Duration unit').setRequired(true).addChoices(...durationChoices))
@@ -243,7 +247,7 @@ function roleOk(interaction, roleId) {
 }
 
 function isAdminCommand(name) {
-  return ['genkey', 'bulkkeys', 'quickgen', 'keyinfo', 'keysbyuser', 'userstatus', 'deletekey', 'revoke', 'deleteavailablekeys', 'deleteallkeys', 'deletegennedkeys', 'users', 'stats', 'exportkeys'].includes(name);
+  return ['genkey', 'bulkkeys', 'quickgen', 'keyinfo', 'keysbyuser', 'userstatus', 'deletekey', 'revoke', 'deleteavailablekeys', 'deleteallkeys', 'deletegennedkeys', 'users', 'stats', 'exportkeys', 'lootlabdebug'].includes(name);
 }
 
 function canUseAdmin(interaction) {
@@ -478,8 +482,11 @@ client.on('interactionCreate', async interaction => {
         username: interaction.user.username,
         tag: interaction.user.tag || interaction.user.username,
       });
-      if (data.error) return interaction.editReply({ content: `❌ ${data.error}` });
-      const link = data.loot_url || data.destination_url;
+      if (data.error) return interaction.editReply({ content: `❌ Backend/LootLabs error: ${data.error}${data.fix ? `
+
+Fix: ${data.fix}` : ''}` });
+      const link = data.loot_url;
+      if (!link || !/^https?:\/\//i.test(link)) return interaction.editReply({ content: '❌ Backend did not return a valid LootLabs locked link. Check backend logs and `/lootlabdebug`.' });
       const embed = new EmbedBuilder()
         .setColor(0x8b5cf6)
         .setTitle('🎁 LootLabs 12 Hour Key')
@@ -488,12 +495,35 @@ client.on('interactionCreate', async interaction => {
           { name: 'Reward link', value: `[Click here to start](${link})`, inline: false },
           { name: 'Reward', value: '12 hour key — timer starts only after `/redeem`', inline: false },
         )
-        .setFooter({ text: data.using_lootlabs_api ? 'LootLabs API link created.' : 'Using direct destination URL because LootLabs API token is not set.' })
+        .setFooter({ text: 'LootLabs API link created. Finish the tasks to receive your key.' })
         .setTimestamp();
       return interaction.editReply({ embeds: [embed] });
     } catch (err) {
       console.error('[Bot] /lootlab error:', err);
       return interaction.editReply({ content: '❌ Server error while creating your LootLabs link.' });
+    }
+  }
+
+  if (name === 'lootlabdebug') {
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const data = await apiGet('/admin/lootlab/config');
+      if (data.error) return interaction.editReply({ content: `❌ ${data.error}` });
+      const embed = new EmbedBuilder()
+        .setColor(data.lootlabs_configured ? 0x10b981 : 0xef4444)
+        .setTitle('LootLabs Backend Config')
+        .addFields(
+          { name: 'Configured', value: data.lootlabs_configured ? 'Yes' : 'No', inline: true },
+          { name: 'Public URL', value: String(data.public_url || 'missing'), inline: false },
+          { name: 'Tier / Tasks / Theme', value: `${data.tier_id} / ${data.number_of_tasks} / ${data.theme}`, inline: true },
+          { name: 'Reward Hours', value: String(data.reward_hours || 'unknown'), inline: true },
+        )
+        .setFooter({ text: 'If configured is No, set LOOTLAB_API_TOKEN on the backend service and redeploy backend.' })
+        .setTimestamp();
+      return interaction.editReply({ embeds: [embed] });
+    } catch (err) {
+      console.error('[Bot] /lootlabdebug error:', err);
+      return interaction.editReply({ content: '❌ Server error while checking LootLabs config.' });
     }
   }
 
